@@ -7,26 +7,38 @@
  */
 
 // must be run within Dokuwiki
-if(!defined('DOKU_INC')) die();
+if (!defined('DOKU_INC')) die();
 
-require_once DOKU_INC.'lib/plugins/jirainfo/utils.php';
+require_once DOKU_INC . 'lib/plugins/jirainfo/utils.php';
 
 /**
  * All DokuWiki plugins to extend the parser/rendering mechanism
  * need to inherit from this class
  */
 class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin 
-{   
-    public function getType() { return 'substition'; }
-    public function getSort() { return 361; }
-    public function connectTo($mode) {
+{
+    public function getType()
+    {
+        return 'substition';
+    }
+
+    public function getSort() 
+    {
+        return 361;
+    }
+
+    public function connectTo($mode)
+    {
         $this->Lexer->addEntryPattern('<(?:ji|jirainfo).*?>(?=.*?</(?:ji|jirainfo)>)', $mode, 'plugin_jirainfo');
     }
-    public function postConnect() {
-        $this->Lexer->addExitPattern('</(?:ji|jirainfo)>','plugin_jirainfo');
+
+    public function postConnect()
+    {
+        $this->Lexer->addExitPattern('</(?:ji|jirainfo)>', 'plugin_jirainfo');
     }
-    
-    public function handle($match, $state, $pos, Doku_Handler $handler){
+
+    public function handle($match, $state, $pos, Doku_Handler $handler)
+    {
         switch ($state) {
             case DOKU_LEXER_ENTER:
                 libxml_use_internal_errors(true);
@@ -38,14 +50,14 @@ class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin
 
                 if ($xml !== false) {
                     foreach ($xml->attributes() as $key => $value) {
-                        $attributes[$key] = (string) $value;
+                        $attributes[$key] = (string)$value;
                     }
                 }
 
                 if (!empty($attributes['key'])) {
                     return ['state' => $state, 'key' => $attributes['key']];
                 } else {
-                    return ['state' => $state, 'error' => 'Ошибка в парметре key.'];
+                    return ['state' => $state, 'error' => 'Ошибка в параметре key.'];
                 }
 
             case DOKU_LEXER_UNMATCHED:
@@ -54,21 +66,24 @@ class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin
             case DOKU_LEXER_EXIT:
                 return ['state' => $state];
         }
-        return array();
+
+        return [];
     }
 
     /**
      * check - correct attributes
      *
-     * @param  Array $attributes
+     * @param  array $attributes
      *
-     * @return boolean
+     * @return bool
      */
-    public function check(array $attributes) {
+    public function check(array $attributes)
+    {
         return array_key_exists('key', $attributes);
     }
 
-    public function render($mode, Doku_Renderer $renderer, $data) {  
+    public function render($mode, Doku_Renderer $renderer, $data)
+    {
         if ($mode === 'xhtml') {
             static $inError = false;
             static $inLink = false;
@@ -106,17 +121,20 @@ class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin
         } elseif ($mode === 'odt') {
             $this->render_for_odt($renderer, $data);
         }
+        return true;
     }
 
-    public function render_for_odt(Doku_Renderer $renderer, $data) {
+    public function render_for_odt(Doku_Renderer $renderer, $data)
+    {
         list($state, $match) = $data;
+
         switch ($state) {
             case DOKU_LEXER_ENTER:
                 $renderer->strong_open();
                 $renderer->underline_open();
-                $renderer->doc = $match;        
-                break;            
-            
+                $renderer->doc = $match;
+                break;
+
             case DOKU_LEXER_UNMATCHED:
                 $url = Utilities::getTaskUrl($renderer->doc, $this->getConf('apiUrl'));
                 $renderer->externallink($url, $match);

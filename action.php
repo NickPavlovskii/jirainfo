@@ -1,7 +1,7 @@
 <?php
 /**
  * Jirainfo action plugin for DokuWiki
- * 
+ *
  * @author     Vadim Balabin <vadikflint@gmail.com>
  * @license    GPL 2 (http://www.gnu.org/licenses/gpl.html)
  */
