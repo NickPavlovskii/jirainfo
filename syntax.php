@@ -17,27 +17,42 @@ require_once DOKU_INC.'lib/plugins/jirainfo/utils.php';
  */
 class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin 
 {   
-    public function getType() {	return 'substition'; }
+    public function getType() { return 'substition'; }
     public function getSort() { return 361; }
-	public function connectTo($mode) { $this->Lexer->addEntryPattern('<(?:ji|jirainfo).*?>(?=.*?</(?:ji|jirainfo)>)', $mode, 'plugin_jirainfo'); }
-    public function postConnect() { $this->Lexer->addExitPattern('</(?:ji|jirainfo)>','plugin_jirainfo'); }
-    
+    public function connectTo($mode) {
+        $this->Lexer->addEntryPattern('<(?:ji|jirainfo).*?>(?=.*?</(?:ji|jirainfo)>)', $mode, 'plugin_jirainfo');
+    }
+    public function postConnect() {
+        $this->Lexer->addExitPattern('</(?:ji|jirainfo)>','plugin_jirainfo');
+    }
     
     public function handle($match, $state, $pos, Doku_Handler $handler){
         switch ($state) {
-			
-          case DOKU_LEXER_ENTER :
-            $xml = simplexml_load_string(str_replace('>', '/>', $match));
-            //$tag = $xml->getName();
-			
-			foreach ($xml->attributes() as $key => $value) {
-				$attributes[$key] = (string) $value;
-            }                        
-            if (array_key_exists('key', $attributes)) return array($state, $attributes['key']);            
-          break;
-          	 
-          case DOKU_LEXER_UNMATCHED :  return array($state, $match);
-          case DOKU_LEXER_EXIT :       return array($state, '');
+            case DOKU_LEXER_ENTER:
+                libxml_use_internal_errors(true);
+                $match = preg_replace('/(?<=key=)([^\s"\'>]+)/', '"$1"', $match);
+                $match = preg_replace('/>$/', '/>', $match);
+
+                $attributes = [];
+                $xml = simplexml_load_string($match);
+
+                if ($xml !== false) {
+                    foreach ($xml->attributes() as $key => $value) {
+                        $attributes[$key] = (string) $value;
+                    }
+                }
+
+                if (!empty($attributes['key'])) {
+                    return ['state' => $state, 'key' => $attributes['key']];
+                } else {
+                    return ['state' => $state, 'error' => 'Ошибка в парметре key.'];
+                }
+
+            case DOKU_LEXER_UNMATCHED:
+                return ['state' => $state, 'text' => $match];
+
+            case DOKU_LEXER_EXIT:
+                return ['state' => $state];
         }
         return array();
     }
@@ -49,32 +64,46 @@ class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin
      *
      * @return boolean
      */
-    public function check(array $attributes) 
-    {
+    public function check(array $attributes) {
         return array_key_exists('key', $attributes);
     }
 
-    public function render($mode, Doku_Renderer $renderer, $data) 
-    {  
-        // $data is what the function handle() return'ed.                
-        if($mode == 'xhtml') {
-            
-            list($state, $match) = $data;
+    public function render($mode, Doku_Renderer $renderer, $data) {  
+        if ($mode === 'xhtml') {
+            static $inError = false;
+            static $inLink = false;
+
+            $state = $data['state'];
+
             switch ($state) {
                 case DOKU_LEXER_ENTER:
-                    list($state, $key) = $data;                    
-                    $renderer->doc .= sprintf('<a class="jirainfo" href="javascript:void(0);" data-key="%s">', $key);		
-                    break;			
-                
+                    $inError = false;
+                    $inLink = false;
+
+                    if (!empty($data['error'])) {
+                        $renderer->doc .= '<span class="jirainfo-error-tooltip" title="' . hsc($data['error']) . '" style="color:red; cursor: default;">';
+                        $inError = true;
+                    } elseif (!empty($data['key'])) {
+                        $renderer->doc .= '<a class="jirainfo" href="javascript:void(0);" data-key="' . hsc($data['key']) . '">';
+                        $inLink = true;
+                    }
+                    break;
+
                 case DOKU_LEXER_UNMATCHED:
-                    $renderer->doc .= htmlentities($match);  
+                    $renderer->doc .= htmlentities($data['text']);
                     break;
 
                 case DOKU_LEXER_EXIT:
-                    $renderer->doc .= '</a>';
+                    if ($inError) {
+                        $renderer->doc .= '</span>';
+                        $inError = false;
+                    } elseif ($inLink) {
+                        $renderer->doc .= '</a>';
+                        $inLink = false;
+                    }
                     break;
             }
-        } elseif ($mode == 'odt') {
+        } elseif ($mode === 'odt') {
             $this->render_for_odt($renderer, $data);
         }
     }
@@ -85,8 +114,8 @@ class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin
             case DOKU_LEXER_ENTER:
                 $renderer->strong_open();
                 $renderer->underline_open();
-                $renderer->doc = $match;		
-                break;			
+                $renderer->doc = $match;        
+                break;            
             
             case DOKU_LEXER_UNMATCHED:
                 $url = Utilities::getTaskUrl($renderer->doc, $this->getConf('apiUrl'));
@@ -99,4 +128,4 @@ class syntax_plugin_jirainfo extends DokuWiki_Syntax_Plugin
                 break;
         }
     }
-}		
+}

@@ -17,12 +17,13 @@ class action_plugin_jirainfo extends DokuWiki_Action_Plugin {
         $controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, '_hookjs');
         $controller->register_hook('DOKUWIKI_STARTED', 'AFTER', $this, 'setConf');
         $controller->register_hook('TOOLBAR_DEFINE', 'AFTER',  $this, 'addButton');
+        $controller->register_hook('IO_WIKIPAGE_WRITE', 'BEFORE', $this, 'handleWriteValidation');
     }
 
     /**
-    * Add the button to the toolbar.
-    *
-    */
+     * Add the button to the toolbar.
+     *
+     */
     public function addButton(&$event, $param) {
         $event->data[] = array(
             'type'   => 'format',
@@ -33,10 +34,52 @@ class action_plugin_jirainfo extends DokuWiki_Action_Plugin {
             'block'  => false
         );
     }
+
+    public function handleWriteValidation(Doku_Event $event, $param) {
+        $content = $event->data[0][1];
+        $ID = $event->data[0][0];
     
-    /**
-     * handle ajax requests
-     */
+        if (!$this->isValidJiContent($content, $error)) {
+            $errorHtml = nl2br(hsc($error));
+            msg("Validation error:<br>" . $errorHtml, -1);
+            $event->preventDefault();
+            $event->stopPropagation();
+        }
+    }
+    
+    private function isValidJiContent(string $content, ?string &$error): bool {
+        $errors = [];
+    
+        if (trim($content) === '') {
+            $errors[] = "Page content is empty.";
+        }
+    
+        if (preg_match_all('/<ji\b([^>]*)>/i', $content, $matches, PREG_OFFSET_CAPTURE)) {
+            foreach ($matches[1] as $match) {
+                $attrString = $match[0];
+                $pos = $match[1];
+    
+                if (!preg_match('/\bkey\s*=\s*(["\'])(.*?)\1/', $attrString, $m)) {
+                    $errors[] = "Missing attribute key with quotes in <ji> tag at position $pos.";
+                    continue;
+                }
+    
+                $keyValue = $m[2];
+    
+                if (preg_match('/[<>]/', $keyValue)) {
+                    $errors[] = "Invalid characters found in key attribute of <ji> tag at position $pos.";
+                }
+            }
+        }
+    
+        if (!empty($errors)) {
+            $error = implode("\n", $errors);
+            return false;
+        }
+    
+        return true;
+    } 
+
     public function _ajax_call(Doku_Event $event, $param) 
     {
         if ($event->data !== 'plugin_jirainfo') {
@@ -169,4 +212,4 @@ class action_plugin_jirainfo extends DokuWiki_Action_Plugin {
             'animation' => $this->getConf('popoverAnimation')
         ];
     }
- }
+}
